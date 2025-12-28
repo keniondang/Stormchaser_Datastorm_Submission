@@ -1,0 +1,14 @@
+# This creates the .gitignore file with the rules inside it
+cat <<EOF > .gitignore
+# Ignore all CSV files
+data/*.csv
+*.csv
+
+# ...but allow the sample data
+!data/sample_data.csv
+
+# Ignore system files
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+EOF
