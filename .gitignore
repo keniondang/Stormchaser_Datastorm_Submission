@@ -1,1 +1,9 @@
-modeling_ready_data.csv
+# Ignore all CSV files except sample
+data/*.csv
+*.csv
+!data/sample_data.csv
+
+# Ignore system / notebook files
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
