@@ -4,58 +4,108 @@ from typing import Dict, List, Optional, Tuple
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, roc_auc_score
+from app.services.model_loader import ModelLoader
 import warnings
 warnings.filterwarnings('ignore')
 
 class PromotionAnalytics:
     """Analytics for promotion effectiveness"""
     
-    def __init__(self, data: pd.DataFrame):
+    def __init__(self, data: pd.DataFrame, model_loader: Optional[ModelLoader] = None):
         self.data = data.copy()
+        self.model_loader = model_loader or ModelLoader()
         self._baseline_model = None
         self._promo_model = None
         self._elasticity_cache = {}
+        self._use_loaded_models = False
+        
+        # Try to load pre-trained models
+        if self.model_loader.load_model('baseline'):
+            self._use_loaded_models = True
+            print("Using loaded baseline model")
+        if self.model_loader.load_model('promo'):
+            print("Using loaded promotion model")
+    
+    def _prepare_features(self, df: pd.DataFrame, model_type: str = 'baseline') -> pd.DataFrame:
+        """Prepare features for model prediction"""
+        df = df.copy()
+        
+        # Time features
+        time_features = ['year', 'month', 'weekofyear', 'weekday', 'is_weekend', 'is_holiday']
+        
+        # External features
+        external_features = ['temperature', 'rain_mm']
+        
+        # Price features
+        price_features = ['list_price']
+        if model_type == 'promo':
+            price_features.extend(['promo_flag', 'discount_pct', 'effective_price'])
+        
+        # Categorical features (will be encoded)
+        categorical_cols = ['store_id', 'city', 'country', 'channel', 
+                          'sku_id', 'category', 'subcategory', 'brand']
+        
+        # Encode categoricals
+        for col in categorical_cols:
+            if col in df.columns:
+                df[col + '_encoded'] = pd.Categorical(df[col]).codes
+        
+        return df
     
     def calculate_baseline_demand(self) -> pd.DataFrame:
-        """Calculate baseline demand predictions"""
+        """Calculate baseline demand predictions using loaded model or fallback"""
         df = self.data.copy()
         
-        # Filter baseline data (no promo, no stockout)
+        # Try to use loaded model first
+        if self.model_loader.has_model('baseline'):
+            try:
+                df_features = self._prepare_features(df, 'baseline')
+                feature_cols = self.model_loader.get_feature_columns('baseline')
+                
+                if feature_cols:
+                    # Use model's expected features
+                    X = df_features[[col for col in feature_cols if col in df_features.columns]]
+                    df['baseline_units_pred'] = self.model_loader.predict('baseline', X)
+                else:
+                    # Fallback: try common feature names
+                    common_features = ['year', 'month', 'weekday', 'is_weekend', 
+                                     'list_price', 'temperature', 'rain_mm']
+                    available_features = [f for f in common_features if f in df_features.columns]
+                    if available_features:
+                        X = df_features[available_features]
+                        df['baseline_units_pred'] = self.model_loader.predict('baseline', X)
+                    else:
+                        raise ValueError("Cannot determine model features")
+                
+                df['baseline_units_pred'] = df['baseline_units_pred'].clip(lower=0)
+                return df
+            except Exception as e:
+                print(f"Error using loaded baseline model: {e}. Falling back to training.")
+        
+        # Fallback: Train model on baseline data
         baseline_df = df[
             (df['promo_flag'] == 0) & 
             (df['stock_out_flag'] == 0)
         ].copy()
         
         if len(baseline_df) == 0:
-            # Fallback: use simple average if no baseline data
             df['baseline_units_pred'] = df.groupby(['sku_id', 'store_id'])['units_sold'].transform('mean')
             return df
         
-        # Features for baseline model
+        df_features = self._prepare_features(baseline_df, 'baseline')
         baseline_features = [
             'year', 'month', 'weekofyear', 'weekday', 'is_weekend', 'is_holiday',
-            'temperature', 'rain_mm',
-            'list_price'
+            'temperature', 'rain_mm', 'list_price'
         ]
-        
-        # Encode categoricals
         categorical_cols = ['store_id', 'city', 'country', 'channel', 
                           'sku_id', 'category', 'subcategory', 'brand']
+        encoded_features = [col + '_encoded' for col in categorical_cols if col + '_encoded' in df_features.columns]
+        all_features = [f for f in baseline_features + encoded_features if f in df_features.columns]
         
-        for col in categorical_cols:
-            if col in baseline_df.columns:
-                baseline_df[col + '_encoded'] = pd.Categorical(baseline_df[col]).codes
-        
-        # Add encoded features
-        encoded_features = [col + '_encoded' for col in categorical_cols if col in baseline_df.columns]
-        all_features = baseline_features + encoded_features
-        
-        # Prepare training data
-        X = baseline_df[all_features].fillna(0)
+        X = df_features[all_features].fillna(0)
         y = baseline_df['units_sold']
         
         if len(X) > 100:
-            # Train model
             X_train, X_val, y_train, y_val = train_test_split(
                 X, y, test_size=0.2, shuffle=False, random_state=42
             )
@@ -69,54 +119,62 @@ class PromotionAnalytics:
             self._baseline_model.fit(X_train, y_train)
             
             # Predict for all data
-            df_encoded = df.copy()
-            for col in categorical_cols:
-                if col in df_encoded.columns:
-                    df_encoded[col + '_encoded'] = pd.Categorical(
-                        df_encoded[col], 
-                        categories=baseline_df[col].cat.categories if hasattr(baseline_df[col], 'cat') 
-                        else pd.Categorical(baseline_df[col]).categories
-                    ).codes
-            
-            X_all = df_encoded[all_features].fillna(0)
+            df_all_features = self._prepare_features(df, 'baseline')
+            X_all = df_all_features[all_features].fillna(0)
             df['baseline_units_pred'] = self._baseline_model.predict(X_all)
         else:
-            # Simple fallback
             df['baseline_units_pred'] = df.groupby(['sku_id', 'store_id'])['units_sold'].transform('mean')
         
         df['baseline_units_pred'] = df['baseline_units_pred'].clip(lower=0)
         return df
     
     def calculate_promotion_effect(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate promotion effect and incremental lift"""
+        """Calculate promotion effect using loaded model or fallback"""
         df = df.copy()
+        df['effective_price'] = df.get('effective_price', df['list_price'] * (1 - df.get('discount_pct', 0)))
         
-        # Calculate effective price
-        df['effective_price'] = df['list_price'] * (1 - df['discount_pct'])
+        # Try to use loaded model first
+        if self.model_loader.has_model('promo'):
+            try:
+                df_features = self._prepare_features(df, 'promo')
+                feature_cols = self.model_loader.get_feature_columns('promo')
+                
+                if feature_cols:
+                    X = df_features[[col for col in feature_cols if col in df_features.columns]]
+                    df['predicted_units'] = self.model_loader.predict('promo', X)
+                else:
+                    # Fallback
+                    promo_features = ['promo_flag', 'discount_pct', 'effective_price', 'baseline_units_pred',
+                                    'year', 'month', 'weekday', 'is_weekend', 'list_price', 
+                                    'stock_on_hand', 'lead_time_days']
+                    available = [f for f in promo_features if f in df_features.columns]
+                    if available:
+                        X = df_features[available]
+                        df['predicted_units'] = self.model_loader.predict('promo', X)
+                    else:
+                        raise ValueError("Cannot determine model features")
+                
+                df['predicted_units'] = df['predicted_units'].clip(lower=0)
+                df['lift'] = df['predicted_units'] - df['baseline_units_pred']
+                df['incremental_units'] = df['lift'].clip(lower=0)
+                return df
+            except Exception as e:
+                print(f"Error using loaded promo model: {e}. Falling back to training.")
         
-        # Features for promotion model
+        # Fallback: Train model
+        df_features = self._prepare_features(df, 'promo')
         promo_features = [
-            'promo_flag', 'discount_pct', 'effective_price',
-            'baseline_units_pred',
+            'promo_flag', 'discount_pct', 'effective_price', 'baseline_units_pred',
             'year', 'month', 'weekofyear', 'weekday', 'is_weekend', 'is_holiday',
-            'temperature', 'rain_mm',
-            'stock_on_hand', 'lead_time_days'
+            'temperature', 'rain_mm', 'stock_on_hand', 'lead_time_days'
         ]
-        
         categorical_cols = ['store_id', 'city', 'country', 'channel', 
                           'sku_id', 'category', 'subcategory', 'brand']
+        encoded_features = [col + '_encoded' for col in categorical_cols if col + '_encoded' in df_features.columns]
+        all_features = [f for f in promo_features + encoded_features if f in df_features.columns]
         
-        df_encoded = df.copy()
-        for col in categorical_cols:
-            if col in df_encoded.columns:
-                df_encoded[col + '_encoded'] = pd.Categorical(df_encoded[col]).codes
-        
-        encoded_features = [col + '_encoded' for col in categorical_cols if col in df_encoded.columns]
-        all_features = promo_features + encoded_features
-        
-        # Prepare training data
-        X = df_encoded[all_features].fillna(0)
-        y = df_encoded['units_sold']
+        X = df_features[all_features].fillna(0)
+        y = df['units_sold']
         
         if len(X) > 100:
             X_train, X_val, y_train, y_val = train_test_split(
@@ -130,7 +188,6 @@ class PromotionAnalytics:
                 n_jobs=-1
             )
             self._promo_model.fit(X_train, y_train)
-            
             df['predicted_units'] = self._promo_model.predict(X)
         else:
             df['predicted_units'] = df['units_sold']
@@ -144,8 +201,6 @@ class PromotionAnalytics:
     def calculate_price_elasticity(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate price elasticity by SKU-channel"""
         df = df.copy()
-        
-        # Calculate elasticity for promo periods only
         promo_df = df[df['promo_flag'] == 1].copy()
         
         if len(promo_df) == 0:
@@ -159,12 +214,10 @@ class PromotionAnalytics:
                 continue
             
             try:
-                # Log-log regression
                 X = np.log(group['effective_price'] + 1)
                 y = np.log(group['units_sold'] + 1)
                 
                 if len(X) > 2 and np.std(X) > 0:
-                    # Simple linear regression
                     coeff = np.corrcoef(X, y)[0, 1] * (np.std(y) / np.std(X))
                     elasticity_results.append({
                         'sku_id': sku_id,
@@ -185,25 +238,22 @@ class PromotionAnalytics:
     def calculate_margins(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate incremental margins"""
         df = df.copy()
-        df['margin_per_unit'] = df['list_price'] * df['margin_pct']
+        df['margin_per_unit'] = df['list_price'] * df.get('margin_pct', 0.3)
         df['incremental_margin'] = df['incremental_units'] * df['margin_per_unit']
         return df
     
     def make_promotion_decisions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply promotion decision rules"""
         df = df.copy()
-        
-        # High response channels (example)
         high_response_channels = ['MT', 'EC']
         
-        # Decision rules
         df['stock_feasible'] = df['stock_on_hand'] >= df['incremental_units']
         
         df['promo_decision'] = df.apply(
             lambda row: 'APPROVE' if (
                 row['promo_flag'] == 1 and
                 row['incremental_margin'] > 0 and
-                (pd.isna(row['price_elasticity']) or row['price_elasticity'] > 1) and
+                (pd.isna(row.get('price_elasticity')) or row['price_elasticity'] > 1) and
                 row['stock_feasible'] and
                 row['channel'] in high_response_channels
             ) else 'REJECT',
@@ -216,14 +266,12 @@ class PromotionAnalytics:
         """Get all promotion recommendations"""
         df = self.data.copy()
         
-        # Run analytics pipeline
         df = self.calculate_baseline_demand()
         df = self.calculate_promotion_effect(df)
         df = self.calculate_price_elasticity(df)
         df = self.calculate_margins(df)
         df = self.make_promotion_decisions(df)
         
-        # Filter to promotions only
         promo_df = df[df['promo_flag'] == 1].copy()
         
         recommendations = []
@@ -231,21 +279,21 @@ class PromotionAnalytics:
             rec = {
                 'id': f"PROMO_{idx}",
                 'date': str(row['date']),
-                'sku_id': row['sku_id'],
-                'sku_name': row.get('sku_name', row['sku_id']),
-                'channel': row['channel'],
-                'country': row['country'],
-                'city': row['city'],
+                'sku_id': str(row['sku_id']),
+                'sku_name': str(row.get('sku_name', row['sku_id'])),
+                'channel': str(row['channel']),
+                'country': str(row['country']),
+                'city': str(row['city']),
                 'baseline_units_pred': float(row['baseline_units_pred']),
                 'predicted_units': float(row['predicted_units']),
                 'incremental_units': float(row['incremental_units']),
-                'price_elasticity': float(row['price_elasticity']) if not pd.isna(row['price_elasticity']) else None,
+                'price_elasticity': float(row['price_elasticity']) if not pd.isna(row.get('price_elasticity')) else None,
                 'incremental_margin': float(row['incremental_margin']),
                 'promo_decision': row['promo_decision'],
-                'discount_pct': float(row['discount_pct']),
-                'list_price': float(row['list_price']),
-                'effective_price': float(row.get('effective_price', row['list_price'])),
-                'stock_on_hand': float(row['stock_on_hand']),
+                'discount_pct': float(row.get('discount_pct', 0)),
+                'list_price': float(row.get('list_price', 0)),
+                'effective_price': float(row.get('effective_price', row.get('list_price', 0))),
+                'stock_on_hand': float(row.get('stock_on_hand', 0)),
                 'stock_feasible': bool(row['stock_feasible'])
             }
             recommendations.append(rec)
@@ -256,8 +304,9 @@ class PromotionAnalytics:
 class SupplyChainAnalytics:
     """Analytics for supply chain risk"""
     
-    def __init__(self, data: pd.DataFrame):
+    def __init__(self, data: pd.DataFrame, model_loader: Optional[ModelLoader] = None):
         self.data = data.copy()
+        self.model_loader = model_loader or ModelLoader()
         self._lead_time_model = None
         self._stockout_model = None
     
@@ -265,7 +314,6 @@ class SupplyChainAnalytics:
         """Calculate demand stability features"""
         df = self.data.copy()
         
-        # Rolling demand statistics
         df['avg_daily_demand_7d'] = (
             df.groupby(['sku_id', 'store_id'])['units_sold']
             .transform(lambda x: x.rolling(7, min_periods=3).mean())
@@ -286,7 +334,6 @@ class SupplyChainAnalytics:
         """Calculate supplier reliability features"""
         df = self.data.copy()
         
-        # Supplier statistics
         df['supplier_lt_mean'] = (
             df.groupby('supplier_id')['lead_time_days']
             .transform('mean')
@@ -309,116 +356,62 @@ class SupplyChainAnalytics:
         return df
     
     def calculate_lead_time_risk(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate lead time risk scores"""
+        """Calculate lead time risk using loaded model or fallback"""
         df = df.copy()
         
-        # Features for lead time prediction
-        lt_features = [
-            'supplier_lt_mean', 'supplier_lt_std', 'supplier_cv',
-            'lead_time_lag_1', 'month', 'weekday', 'temperature', 'rain_mm'
-        ]
+        # Try loaded model first
+        if self.model_loader.has_model('lead_time'):
+            try:
+                lt_features = ['supplier_lt_mean', 'supplier_lt_std', 'supplier_cv',
+                              'lead_time_lag_1', 'month', 'weekday', 'temperature', 'rain_mm']
+                available_features = [f for f in lt_features if f in df.columns]
+                if available_features:
+                    X = df[available_features].fillna(0)
+                    df['predicted_lead_time'] = self.model_loader.predict('lead_time', X)
+                    df['lead_time_risk'] = df['predicted_lead_time'] * df['supplier_cv']
+                    return df
+            except Exception as e:
+                print(f"Error using loaded lead_time model: {e}. Falling back.")
         
-        categorical_cols = ['supplier_id', 'country', 'city']
-        df_encoded = df.copy()
-        
-        for col in categorical_cols:
-            if col in df_encoded.columns:
-                df_encoded[col + '_encoded'] = pd.Categorical(df_encoded[col]).codes
-        
-        encoded_features = [col + '_encoded' for col in categorical_cols if col in df_encoded.columns]
-        all_features = lt_features + encoded_features
-        
-        # Prepare data
-        train_df = df_encoded.dropna(subset=all_features + ['lead_time_days'])
-        
-        if len(train_df) > 100:
-            X = train_df[all_features].fillna(0)
-            y = train_df['lead_time_days']
-            
-            X_train, X_val, y_train, y_val = train_test_split(
-                X, y, test_size=0.2, shuffle=False, random_state=42
-            )
-            
-            self._lead_time_model = RandomForestRegressor(
-                n_estimators=100,
-                max_depth=10,
-                random_state=42,
-                n_jobs=-1
-            )
-            self._lead_time_model.fit(X_train, y_train)
-            
-            # Predict for all
-            X_all = df_encoded[all_features].fillna(0)
-            df['predicted_lead_time'] = self._lead_time_model.predict(X_all)
-        else:
-            df['predicted_lead_time'] = df['supplier_lt_mean']
-        
-        # Calculate risk score
+        # Fallback
+        df['predicted_lead_time'] = df['supplier_lt_mean']
         df['lead_time_risk'] = df['predicted_lead_time'] * df['supplier_cv']
-        
         return df
     
     def calculate_stockout_risk(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate stockout risk probabilities"""
+        """Calculate stockout risk using loaded model or fallback"""
         df = df.copy()
         
-        # Features for stockout prediction
-        so_features = [
-            'inventory_coverage_days',
-            'avg_daily_demand_7d',
-            'demand_std_7d',
-            'supplier_cv',
-            'lead_time_risk',
-            'lead_time_days',
-            'month',
-            'weekday',
-            'is_holiday'
-        ]
+        # Try loaded model first
+        if self.model_loader.has_model('stockout'):
+            try:
+                so_features = ['inventory_coverage_days', 'avg_daily_demand_7d', 'demand_std_7d',
+                              'supplier_cv', 'lead_time_risk', 'lead_time_days', 'month', 'weekday', 'is_holiday']
+                available_features = [f for f in so_features if f in df.columns]
+                if available_features:
+                    X = df[available_features].fillna(0)
+                    df['stockout_risk_score'] = self.model_loader.predict_proba('stockout', X)[:, 1]
+                    return df
+            except Exception as e:
+                print(f"Error using loaded stockout model: {e}. Falling back.")
         
-        # Prepare data
-        train_df = df.dropna(subset=so_features + ['stock_out_flag'])
-        
-        if len(train_df) > 100:
-            X = train_df[so_features].fillna(0)
-            y = train_df['stock_out_flag']
-            
-            X_train, X_val, y_train, y_val = train_test_split(
-                X, y, test_size=0.2, shuffle=False, random_state=42
-            )
-            
-            self._stockout_model = RandomForestClassifier(
-                n_estimators=100,
-                max_depth=10,
-                class_weight='balanced',
-                random_state=42,
-                n_jobs=-1
-            )
-            self._stockout_model.fit(X_train, y_train)
-            
-            # Predict probabilities for all
-            X_all = df[so_features].fillna(0)
-            df['stockout_risk_score'] = self._stockout_model.predict_proba(X_all)[:, 1]
-        else:
-            # Simple heuristic
-            df['stockout_risk_score'] = np.where(
-                df['inventory_coverage_days'] < 3,
-                0.7,
-                np.where(df['inventory_coverage_days'] < 5, 0.4, 0.1)
-            )
-        
+        # Fallback heuristic
+        df['stockout_risk_score'] = np.where(
+            df['inventory_coverage_days'] < 3,
+            0.7,
+            np.where(df['inventory_coverage_days'] < 5, 0.4, 0.1)
+        )
         return df
     
     def get_stockout_alerts(self, threshold: float = 0.7) -> List[Dict]:
         """Get high-priority stockout alerts"""
         df = self.data.copy()
         
-        # Run analytics pipeline
         df = self.calculate_demand_features()
         df = self.calculate_supplier_features()
         df = self.calculate_lead_time_risk(df)
         df = self.calculate_stockout_risk(df)
         
-        # Filter high-risk alerts
         alerts_df = df[
             (df['stockout_risk_score'] > threshold) &
             (df['inventory_coverage_days'] < 3)
@@ -431,12 +424,12 @@ class SupplyChainAnalytics:
             alert = {
                 'id': f"ALERT_{idx}",
                 'date': str(row['date']),
-                'sku_id': row['sku_id'],
-                'sku_name': row.get('sku_name', row['sku_id']),
-                'supplier_id': row['supplier_id'],
-                'store_id': row['store_id'],
-                'country': row['country'],
-                'city': row['city'],
+                'sku_id': str(row['sku_id']),
+                'sku_name': str(row.get('sku_name', row['sku_id'])),
+                'supplier_id': str(row['supplier_id']),
+                'store_id': str(row['store_id']),
+                'country': str(row['country']),
+                'city': str(row['city']),
                 'stockout_risk_score': float(row['stockout_risk_score']),
                 'inventory_coverage_days': float(row['inventory_coverage_days']),
                 'lead_time_risk': float(row['lead_time_risk']),
@@ -452,12 +445,10 @@ class SupplyChainAnalytics:
         """Get supplier reliability rankings"""
         df = self.data.copy()
         
-        # Calculate features
         df = self.calculate_supplier_features()
         df = self.calculate_lead_time_risk(df)
         df = self.calculate_stockout_risk(df)
         
-        # Aggregate by supplier
         supplier_stats = df.groupby('supplier_id').agg({
             'lead_time_days': ['mean', 'std', 'count'],
             'stock_out_flag': 'mean',
@@ -472,14 +463,12 @@ class SupplyChainAnalytics:
             'stockout_rate', 'avg_stockout_risk', 'lt_mean', 'lt_std', 'cv'
         ]
         
-        # Calculate reliability index (lower is better)
         supplier_stats['reliability_index'] = (
             supplier_stats['avg_lead_time'] * 0.4 +
             supplier_stats['lead_time_std'] * 0.3 +
             supplier_stats['stockout_rate'] * 100 * 0.3
         )
         
-        # Classify suppliers
         def classify_supplier(row):
             if row['lt_mean'] < 5 and row['lt_std'] < 2:
                 return 'Reliable'
@@ -495,7 +484,7 @@ class SupplyChainAnalytics:
         suppliers = []
         for _, row in supplier_stats.iterrows():
             supplier = {
-                'supplier_id': row['supplier_id'],
+                'supplier_id': str(row['supplier_id']),
                 'avg_lead_time': float(row['avg_lead_time']),
                 'lead_time_std': float(row['lead_time_std']),
                 'coefficient_of_variation': float(row['cv']),
@@ -508,4 +497,3 @@ class SupplyChainAnalytics:
             suppliers.append(supplier)
         
         return sorted(suppliers, key=lambda x: x['reliability_index'])
-

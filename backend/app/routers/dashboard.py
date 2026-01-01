@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from typing import Dict, List
 import pandas as pd
 from app.services.data_loader import DataLoader
@@ -8,6 +8,7 @@ router = APIRouter()
 
 # Initialize data loader (singleton pattern)
 _data_loader = None
+_model_loader = None
 
 def get_data_loader():
     global _data_loader
@@ -15,25 +16,30 @@ def get_data_loader():
         _data_loader = DataLoader()
     return _data_loader
 
+def get_model_loader(request: Request):
+    """Get model loader from app state"""
+    return request.app.state.model_loader
+
 
 @router.get("/summary")
-async def get_dashboard_summary() -> Dict:
+async def get_dashboard_summary(request: Request) -> Dict:
     """Get overall dashboard KPIs and metrics"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
         # Calculate KPIs
-        total_sales = float(df['net_sales'].sum())
+        total_sales = float(df.get('net_sales', df.get('gross_sales', 0)).sum())
         total_units = int(df['units_sold'].sum())
         
         # Promotion metrics
         promo_df = df[df['promo_flag'] == 1]
         promo_count = len(promo_df)
-        promo_sales = float(promo_df['net_sales'].sum()) if len(promo_df) > 0 else 0
+        promo_sales = float(promo_df.get('net_sales', promo_df.get('gross_sales', 0)).sum()) if len(promo_df) > 0 else 0
         
         # Calculate promotion ROI (simplified)
-        promo_analytics = PromotionAnalytics(df)
+        promo_analytics = PromotionAnalytics(df, model_loader)
         promo_recs = promo_analytics.get_promotion_recommendations()
         approved_promos = [r for r in promo_recs if r['promo_decision'] == 'APPROVE']
         total_incremental_margin = sum(r['incremental_margin'] for r in approved_promos)
@@ -44,7 +50,7 @@ async def get_dashboard_summary() -> Dict:
         stockout_rate = (stockout_count / len(df) * 100) if len(df) > 0 else 0
         
         # Supplier reliability
-        supply_analytics = SupplyChainAnalytics(df)
+        supply_analytics = SupplyChainAnalytics(df, model_loader)
         suppliers = supply_analytics.get_supplier_reliability()
         avg_reliability = sum(s['reliability_index'] for s in suppliers) / len(suppliers) if suppliers else 0
         reliable_suppliers = len([s for s in suppliers if s['risk_class'] == 'Reliable'])
@@ -94,6 +100,13 @@ async def get_sales_trend(days: int = 30) -> Dict:
         recent_date = df['date'].max() - pd.Timedelta(days=days)
         df_recent = df[df['date'] >= recent_date].copy()
         
+        # Handle missing net_sales column
+        if 'net_sales' not in df_recent.columns:
+            if 'gross_sales' in df_recent.columns:
+                df_recent['net_sales'] = df_recent['gross_sales']
+            else:
+                df_recent['net_sales'] = df_recent.get('units_sold', 0) * df_recent.get('list_price', 0)
+        
         # Aggregate by date
         daily_sales = df_recent.groupby('date').agg({
             'net_sales': 'sum',
@@ -112,13 +125,14 @@ async def get_sales_trend(days: int = 30) -> Dict:
 
 
 @router.get("/promotion-effectiveness")
-async def get_promotion_effectiveness() -> Dict:
+async def get_promotion_effectiveness(request: Request) -> Dict:
     """Get promotion effectiveness metrics"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        promo_analytics = PromotionAnalytics(df)
+        promo_analytics = PromotionAnalytics(df, model_loader)
         promo_recs = promo_analytics.get_promotion_recommendations()
         
         # Aggregate by channel

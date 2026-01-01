@@ -19,15 +19,17 @@ def get_data_loader():
 
 @router.get("/alerts", response_model=List[StockoutAlert])
 async def get_stockout_alerts(
+    request: Request,
     priority: Optional[str] = None,
     limit: int = 50
 ) -> List[Dict]:
     """Get stockout risk alerts"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        supply_analytics = SupplyChainAnalytics(df)
+        supply_analytics = SupplyChainAnalytics(df, model_loader)
         alerts = supply_analytics.get_stockout_alerts(threshold=0.6)
         
         # Filter by priority if specified
@@ -44,15 +46,17 @@ async def get_stockout_alerts(
 
 @router.get("/suppliers", response_model=List[SupplierReliability])
 async def get_suppliers(
+    request: Request,
     risk_class: Optional[str] = None,
     limit: int = 100
 ) -> List[Dict]:
     """Get supplier reliability rankings"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        supply_analytics = SupplyChainAnalytics(df)
+        supply_analytics = SupplyChainAnalytics(df, model_loader)
         suppliers = supply_analytics.get_supplier_reliability()
         
         # Filter by risk class if specified
@@ -68,13 +72,14 @@ async def get_suppliers(
 
 
 @router.get("/supplier/{supplier_id}", response_model=SupplierDetail)
-async def get_supplier_detail(supplier_id: str) -> Dict:
+async def get_supplier_detail(request: Request, supplier_id: str) -> Dict:
     """Get detailed supplier analytics"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        supply_analytics = SupplyChainAnalytics(df)
+        supply_analytics = SupplyChainAnalytics(df, model_loader)
         suppliers = supply_analytics.get_supplier_reliability()
         
         # Find supplier
@@ -144,15 +149,17 @@ async def get_supplier_detail(supplier_id: str) -> Dict:
 
 @router.get("/stockout-risk", response_model=List[StockoutRiskPrediction])
 async def get_stockout_risk_predictions(
+    request: Request,
     threshold: float = 0.5,
     limit: int = 50
 ) -> List[Dict]:
     """Get stockout risk predictions"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        supply_analytics = SupplyChainAnalytics(df)
+        supply_analytics = SupplyChainAnalytics(df, model_loader)
         
         # Calculate features
         df = supply_analytics.calculate_demand_features()
@@ -192,13 +199,14 @@ async def get_stockout_risk_predictions(
 
 
 @router.get("/safety-stock/recommendations")
-async def get_safety_stock_recommendations() -> Dict:
+async def get_safety_stock_recommendations(request: Request) -> Dict:
     """Get dynamic safety stock recommendations"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        supply_analytics = SupplyChainAnalytics(df)
+        supply_analytics = SupplyChainAnalytics(df, model_loader)
         
         # Calculate features
         df = supply_analytics.calculate_demand_features()

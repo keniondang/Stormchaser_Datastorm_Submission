@@ -14,6 +14,7 @@ import { promotionsApi } from '../services/api';
 import { PromotionRecommendation, RootStackParamList } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorView from '../components/common/ErrorView';
+import MockDataIndicator from '../components/common/MockDataIndicator';
 import PromotionCard from '../components/cards/PromotionCard';
 import { Colors, FontSizes, FontWeights, Spacing } from '../utils/constants';
 
@@ -88,6 +89,7 @@ export default function PromotionsScreen() {
 
   return (
     <View style={styles.container}>
+      <MockDataIndicator />
       <View style={styles.filters}>
         <TextInput
           style={styles.searchInput}

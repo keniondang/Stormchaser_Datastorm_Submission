@@ -12,6 +12,8 @@ This repository presents a **business-driven analytics solution** for two critic
 
 The project demonstrates how **advanced analytics, causal thinking, and risk-based modeling** can be used to improve profitability, service levels, and supply chain stability.
 
+**Now includes a complete React Native mobile app and Python FastAPI backend!**
+
 ---
 
 ## 🎯 Business Objectives
@@ -56,23 +58,22 @@ Even with stable demand forecasts:
 
 ## 📁 Repository Structure
 ```bash
-├── docs/
+├── docs/                          # Project documentation
 │ ├── problem_statement_01_blind_promotion.md
 │ ├── data_preprocessing_guidelines.md
 │ ├── eda_guidelines.md
 │ ├── feature_engineering_plan.md
 │ ├── modeling_plan.md
-│ │
 │ ├── problem_statement_02_supply_chain_disconnect.md
 │ ├── eda_supply_chain_disconnect.md
 │ ├── feature_engineering_plan_supply_chain_disconnect.md
 │ └── modeling_plan_supply_chain_disconnect.md
 │
-├── notebooks/
+├── notebooks/                     # Analytics notebooks
 │ ├── 01_promotion_effect_model.ipynb
 │ └── 02_supply_chain_disconnect.ipynb
 │
-├── backend/                    # Python FastAPI Backend
+├── backend/                       # Python FastAPI Backend
 │ ├── app/
 │ │   ├── main.py
 │ │   ├── models/
@@ -80,9 +81,10 @@ Even with stable demand forecasts:
 │ │   ├── services/
 │ │   └── data/
 │ ├── requirements.txt
-│ └── README.md
+│ ├── README.md
+│ └── MODEL_SETUP.md
 │
-├── mobile/                     # React Native Mobile App
+├── mobile/                        # React Native Mobile App
 │ ├── src/
 │ │   ├── screens/
 │ │   ├── components/
@@ -94,10 +96,129 @@ Even with stable demand forecasts:
 │ ├── package.json
 │ └── README.md
 │
+├── models/                        # ML Models (add your joblib files here)
+│
+├── modeling_ready_data.csv       # Your data file (or .zip)
 ├── requirements.txt
 └── README.md
 ```
 
+---
+
+## ⚙️ Quick Start
+
+### 1. Backend Setup
+
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Place your data file in project root
+# modeling_ready_data.csv or modeling_ready_data.csv.zip
+
+# (Optional) Add ML models to models/ directory
+# See backend/MODEL_SETUP.md for details
+
+# Start the server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Backend will be available at `http://localhost:8000`
+- API Docs: `http://localhost:8000/docs`
+
+### 2. Mobile App Setup
+
+```bash
+cd mobile
+npm install
+npm start
+```
+
+Then:
+- Press `i` for iOS simulator
+- Press `a` for Android emulator
+- Or scan QR code with Expo Go app
+
+**Important:** Update API URL in `mobile/src/services/api.ts` if needed (automatically configured for simulators).
+
+### 3. Add Your Models (Optional)
+
+1. Create `models/` directory in project root
+2. Place joblib model files:
+   - `baseline_model.joblib` - Baseline demand model
+   - `promo_model.joblib` - Promotion effect model
+   - `stockout_model.joblib` - Stockout risk model
+   - `lead_time_model.joblib` - Lead time prediction model
+
+See `backend/MODEL_SETUP.md` for detailed instructions.
+
+---
+
+## 📱 Mobile Application Features
+
+- **Real-time Dashboard**: KPIs, sales trends, and alerts
+- **Promotion Management**: View, filter, and analyze promotion recommendations
+- **Supply Chain Monitoring**: Stockout alerts and supplier reliability tracking
+- **Decision Support**: Clear approve/reject recommendations with detailed analytics
+
+---
+
+## 🔌 Backend API Features
+
+- **RESTful API**: Comprehensive endpoints for all analytics
+- **ML Model Integration**: Automatic loading of joblib models
+- **Data Processing**: Automatic CSV loading and preprocessing
+- **Fallback Training**: Trains models on-the-fly if pre-trained models not available
+- **OpenAPI Documentation**: Interactive API docs at `/docs`
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐
+│  React Native   │  Mobile App (iOS/Android)
+│   Mobile App    │
+└────────┬────────┘
+         │ HTTP/REST
+         │
+┌────────▼────────┐
+│  Python FastAPI │  Backend API
+│    Backend      │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  ML Models      │  Joblib Models (Optional)
+│  + Analytics    │  + On-the-fly Training
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  CSV Data       │  modeling_ready_data.csv
+└─────────────────┘
+```
+
+---
+
+## 📈 Business Impact
+
+This solution enables organizations to:
+
+- Reduce wasteful discounting
+- Increase promotional ROI
+- Prevent stockouts before they happen
+- Stabilize supply chain operations
+- Improve service levels on high-value SKUs
+- Align Demand Planning and S&OP processes
+
+---
+
+## 🧠 Analytics & Modeling Philosophy
+
+- Business-first modeling (not metric-driven)
+- Separation of demand and supply uncertainty
+- Risk-based decision making
+- Time-aware validation (no leakage)
+- Interpretability for operations teams
 
 ---
 
@@ -131,147 +252,33 @@ Even with stable demand forecasts:
 
 ---
 
-## 🧠 Analytics & Modeling Philosophy
+## 🚀 Next Steps
 
-- Business-first modeling (not metric-driven)
-- Separation of demand and supply uncertainty
-- Risk-based decision making
-- Time-aware validation (no leakage)
-- Interpretability for operations teams
-
----
-
-## 📈 Business Impact
-
-This solution enables organizations to:
-
-- Reduce wasteful discounting
-- Increase promotional ROI
-- Prevent stockouts before they happen
-- Stabilize supply chain operations
-- Improve service levels on high-value SKUs
-- Align Demand Planning and S&OP processes
-
-## 📱 Mobile Application
-
-The React Native mobile app provides:
-
-- **Real-time Dashboard**: KPIs, sales trends, and alerts
-- **Promotion Management**: View, filter, and analyze promotion recommendations
-- **Supply Chain Monitoring**: Stockout alerts and supplier reliability tracking
-- **Decision Support**: Clear approve/reject recommendations with detailed analytics
-
-## 🔌 Backend API
-
-The Python FastAPI backend provides:
-
-- **RESTful API**: Comprehensive endpoints for all analytics
-- **Analytics Engine**: Promotion effectiveness and supply chain risk calculations
-- **Mock Data Generation**: Automatic sample data generation for testing
-- **OpenAPI Documentation**: Interactive API documentation at `/docs`
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐
-│  React Native   │  Mobile App (iOS/Android)
-│   Mobile App    │
-└────────┬────────┘
-         │ HTTP/REST
-         │
-┌────────▼────────┐
-│  Python FastAPI │  Backend API
-│    Backend      │
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│  Analytics      │  ML Models & Calculations
-│   Services      │
-└─────────────────┘
-```
+1. **Add Your Data**: Place `modeling_ready_data.csv` in project root
+2. **Add Your Models**: Place joblib files in `models/` directory (see `backend/MODEL_SETUP.md`)
+3. **Start Backend**: `cd backend && uvicorn app.main:app --reload`
+4. **Start Mobile**: `cd mobile && npm start`
+5. **Test**: Visit `http://localhost:8000/docs` and test the mobile app
 
 ---
 
-## ⚙️ Setup & Installation
+## 📚 Documentation
 
-### Analytics Notebooks
-
-Clone the repository and install dependencies:
-
-```bash
-git clone <https://github.com/keniondang/Stormchaser_Datastorm_Submission>
-cd <Stormchaser_Datastorm_Submission>
-pip install -r requirements.txt
-```
-
-### Backend API
-
-1. Navigate to backend directory:
-```bash
-cd backend
-```
-
-2. Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-3. Start the FastAPI server:
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The API will be available at `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-See [backend/README.md](backend/README.md) for detailed API documentation.
-
-### Mobile App
-
-1. Navigate to mobile directory:
-```bash
-cd mobile
-```
-
-2. Install Node.js dependencies:
-```bash
-npm install
-```
-
-3. Start the Expo development server:
-```bash
-npm start
-```
-
-4. Run on your preferred platform:
-   - Press `i` for iOS simulator
-   - Press `a` for Android emulator
-   - Scan QR code with Expo Go app on your device
-
-**Important:** Update the API base URL in `mobile/src/services/api.ts` to match your backend server address.
-
-See [mobile/README.md](mobile/README.md) for detailed mobile app documentation.
+- **Backend API**: See `backend/README.md`
+- **Mobile App**: See `mobile/README.md`
+- **Model Setup**: See `backend/MODEL_SETUP.md`
+- **Troubleshooting**: See `mobile/SETUP.md`
 
 ---
 
-## 🚀 Quick Start (Full Stack)
+## 🎉 Project Status
 
-1. **Start Backend:**
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+✅ Complete React Native mobile app  
+✅ Complete Python FastAPI backend  
+✅ CSV data loading with automatic preprocessing  
+✅ ML model integration (joblib support)  
+✅ Fallback model training  
+✅ Real-time analytics and predictions  
+✅ Production-ready codebase  
 
-2. **Start Mobile App (in a new terminal):**
-```bash
-cd mobile
-npm install
-npm start
-```
-
-3. **Access:**
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
-   - Mobile App: Use Expo Go or simulator
+**Ready for your data and models!**

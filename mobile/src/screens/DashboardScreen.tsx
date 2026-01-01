@@ -11,6 +11,7 @@ import { dashboardApi } from '../services/api';
 import { DashboardSummary, SalesTrend } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorView from '../components/common/ErrorView';
+import MockDataIndicator from '../components/common/MockDataIndicator';
 import MetricCard from '../components/cards/MetricCard';
 import AlertCard from '../components/cards/AlertCard';
 import LineChart from '../components/charts/LineChart';
@@ -86,6 +87,7 @@ export default function DashboardScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
+      <MockDataIndicator />
       <View style={styles.content}>
         <Text style={styles.sectionTitle}>Key Metrics</Text>
         <View style={styles.metricsGrid}>

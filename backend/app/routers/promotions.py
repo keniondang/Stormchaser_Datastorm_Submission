@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from typing import List, Optional, Dict
 from app.services.data_loader import DataLoader
 from app.services.analytics import PromotionAnalytics
@@ -15,9 +15,14 @@ def get_data_loader():
         _data_loader = DataLoader()
     return _data_loader
 
+def get_model_loader(request: Request):
+    """Get model loader from app state"""
+    return request.app.state.model_loader
+
 
 @router.get("/list", response_model=List[PromotionRecommendation])
 async def get_promotion_list(
+    request: Request,
     status: Optional[str] = None,
     channel: Optional[str] = None,
     limit: int = 100
@@ -25,9 +30,10 @@ async def get_promotion_list(
     """Get list of promotion recommendations"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        promo_analytics = PromotionAnalytics(df)
+        promo_analytics = PromotionAnalytics(df, model_loader)
         recommendations = promo_analytics.get_promotion_recommendations()
         
         # Apply filters
@@ -46,13 +52,14 @@ async def get_promotion_list(
 
 
 @router.get("/{promotion_id}", response_model=PromotionDetail)
-async def get_promotion_detail(promotion_id: str) -> Dict:
+async def get_promotion_detail(request: Request, promotion_id: str) -> Dict:
     """Get detailed promotion analytics"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        promo_analytics = PromotionAnalytics(df)
+        promo_analytics = PromotionAnalytics(df, model_loader)
         recommendations = promo_analytics.get_promotion_recommendations()
         
         # Find promotion by ID
@@ -103,13 +110,14 @@ async def get_promotion_detail(promotion_id: str) -> Dict:
 
 
 @router.get("/stats/summary")
-async def get_promotion_stats() -> Dict:
+async def get_promotion_stats(request: Request) -> Dict:
     """Get promotion statistics summary"""
     try:
         data_loader = get_data_loader()
+        model_loader = get_model_loader(request)
         df = data_loader.load_data()
         
-        promo_analytics = PromotionAnalytics(df)
+        promo_analytics = PromotionAnalytics(df, model_loader)
         recommendations = promo_analytics.get_promotion_recommendations()
         
         total = len(recommendations)

@@ -10,13 +10,17 @@ interface ErrorViewProps {
 export default function ErrorView({ message, onRetry }: ErrorViewProps) {
   const isNetworkError = message.toLowerCase().includes('cannot connect') || 
                         message.toLowerCase().includes('network error') ||
-                        message.toLowerCase().includes('no response');
+                        message.toLowerCase().includes('no response') ||
+                        message.toLowerCase().includes('using mock data');
   
   const getHelpText = () => {
-    if (isNetworkError) {
+    if (isNetworkError && !message.toLowerCase().includes('using mock data')) {
       return Platform.OS === 'android' 
         ? 'For Android: Make sure backend is running and use 10.0.2.2:8000'
         : 'For iOS: Make sure backend is running at localhost:8000';
+    }
+    if (message.toLowerCase().includes('using mock data')) {
+      return 'The app is using mock data. All features work normally, but data is simulated.';
     }
     return null;
   };

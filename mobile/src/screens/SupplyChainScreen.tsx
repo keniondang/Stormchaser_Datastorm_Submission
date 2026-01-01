@@ -13,6 +13,7 @@ import { supplyChainApi } from '../services/api';
 import { StockoutAlert, SupplierReliability, RootStackParamList } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ErrorView from '../components/common/ErrorView';
+import MockDataIndicator from '../components/common/MockDataIndicator';
 import AlertCard from '../components/cards/AlertCard';
 import { Colors, FontSizes, FontWeights, Spacing } from '../utils/constants';
 import { getRiskColor, formatPercentage } from '../utils/formatters';
@@ -68,6 +69,7 @@ export default function SupplyChainScreen() {
 
   return (
     <View style={styles.container}>
+      <MockDataIndicator />
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'alerts' && styles.tabActive]}
