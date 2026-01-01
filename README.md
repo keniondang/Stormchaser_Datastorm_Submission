@@ -72,6 +72,28 @@ Even with stable demand forecasts:
 │ ├── 01_promotion_effect_model.ipynb
 │ └── 02_supply_chain_disconnect.ipynb
 │
+├── backend/                    # Python FastAPI Backend
+│ ├── app/
+│ │   ├── main.py
+│ │   ├── models/
+│ │   ├── routers/
+│ │   ├── services/
+│ │   └── data/
+│ ├── requirements.txt
+│ └── README.md
+│
+├── mobile/                     # React Native Mobile App
+│ ├── src/
+│ │   ├── screens/
+│ │   ├── components/
+│ │   ├── services/
+│ │   ├── navigation/
+│ │   ├── types/
+│ │   └── utils/
+│ ├── App.tsx
+│ ├── package.json
+│ └── README.md
+│
 ├── requirements.txt
 └── README.md
 ```
@@ -130,9 +152,49 @@ This solution enables organizations to:
 - Improve service levels on high-value SKUs
 - Align Demand Planning and S&OP processes
 
+## 📱 Mobile Application
+
+The React Native mobile app provides:
+
+- **Real-time Dashboard**: KPIs, sales trends, and alerts
+- **Promotion Management**: View, filter, and analyze promotion recommendations
+- **Supply Chain Monitoring**: Stockout alerts and supplier reliability tracking
+- **Decision Support**: Clear approve/reject recommendations with detailed analytics
+
+## 🔌 Backend API
+
+The Python FastAPI backend provides:
+
+- **RESTful API**: Comprehensive endpoints for all analytics
+- **Analytics Engine**: Promotion effectiveness and supply chain risk calculations
+- **Mock Data Generation**: Automatic sample data generation for testing
+- **OpenAPI Documentation**: Interactive API documentation at `/docs`
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐
+│  React Native   │  Mobile App (iOS/Android)
+│   Mobile App    │
+└────────┬────────┘
+         │ HTTP/REST
+         │
+┌────────▼────────┐
+│  Python FastAPI │  Backend API
+│    Backend      │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  Analytics      │  ML Models & Calculations
+│   Services      │
+└─────────────────┘
+```
+
 ---
 
 ## ⚙️ Setup & Installation
+
+### Analytics Notebooks
 
 Clone the repository and install dependencies:
 
@@ -140,3 +202,76 @@ Clone the repository and install dependencies:
 git clone <https://github.com/keniondang/Stormchaser_Datastorm_Submission>
 cd <Stormchaser_Datastorm_Submission>
 pip install -r requirements.txt
+```
+
+### Backend API
+
+1. Navigate to backend directory:
+```bash
+cd backend
+```
+
+2. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Start the FastAPI server:
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The API will be available at `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+See [backend/README.md](backend/README.md) for detailed API documentation.
+
+### Mobile App
+
+1. Navigate to mobile directory:
+```bash
+cd mobile
+```
+
+2. Install Node.js dependencies:
+```bash
+npm install
+```
+
+3. Start the Expo development server:
+```bash
+npm start
+```
+
+4. Run on your preferred platform:
+   - Press `i` for iOS simulator
+   - Press `a` for Android emulator
+   - Scan QR code with Expo Go app on your device
+
+**Important:** Update the API base URL in `mobile/src/services/api.ts` to match your backend server address.
+
+See [mobile/README.md](mobile/README.md) for detailed mobile app documentation.
+
+---
+
+## 🚀 Quick Start (Full Stack)
+
+1. **Start Backend:**
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+2. **Start Mobile App (in a new terminal):**
+```bash
+cd mobile
+npm install
+npm start
+```
+
+3. **Access:**
+   - Backend API: http://localhost:8000
+   - API Docs: http://localhost:8000/docs
+   - Mobile App: Use Expo Go or simulator
